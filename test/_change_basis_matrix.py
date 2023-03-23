@@ -1,7 +1,7 @@
-import common
+from _common import *
 from change_basis_matrix import *
 
-common.print_testing_statement("ChangeBasisMatrix")
+print_testing_statement("ChangeBasisMatrix")
 for N in [2,3]:
     print(f"N = {N}")
     cbm = ChangeBasisMatrix(N)

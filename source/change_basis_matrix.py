@@ -1,4 +1,4 @@
-import common
+from common import *
 from q_gauss_lobatto import *
 class ChangeBasisMatrix:
     # A class to calculate and store a matrix corresponding to basis conversion from nodal
@@ -19,3 +19,6 @@ class ChangeBasisMatrix:
             
             # convert to modal basis
             self.matrix[:, col] = np.polynomial.legendre.poly2leg(nodal_fn_coeffs)
+    
+    def get_modes(self, nodal_values):
+        return self.matrix.dot(nodal_values)
