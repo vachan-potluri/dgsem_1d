@@ -60,6 +60,27 @@ class Euler:
         return 0.5*(x1 + x2)/F
     
     @staticmethod
+    def get_K(u, a, H):
+        # returns the right eigenvector matrix
+        K = np.zeros((Euler.n_vars, Euler.n_vars))
+        # setting columns
+        K[:,0] = [1, u-a, H-u*a]
+        K[:,1] = [1, u, 0.5*u**2]
+        K[:,2] = [1, u+a, H+u*a]
+        return K
+    
+    @staticmethod
+    def get_Kinv(u, a, H):
+        # returns the inverse of right eigenvector matrix
+        Kinv = np.zeros((Euler.n_vars, Euler.n_vars))
+        # setting rows
+        temp = 1/(Euler.gamma-1)
+        Kinv[0,:] = [H+a*(u-a)*temp, -u-a*temp, 1]
+        Kinv[1,:] = [2*(2*a**2*temp - H), 2*u, -2]
+        Kinv[2,:] = [H-a*(u+a)*temp, -u+a*temp, 1]
+        return Kinv
+    
+    @staticmethod
     def chandrashekhar_volume_flux(consl, consr):
         # chandrashekhar's volume flux
         # doesn't assert positivity
@@ -69,10 +90,8 @@ class Euler:
         betar = 0.5*consr[0]/primr[2]
         rho_ln = Euler.log_avg(consl[0], consr[0])
         beta_ln = Euler.log_avg(betal, betar)
-        rho_avg = 0.5*(consl[0]+consr[0])
-        beta_avg = 0.5*(betal+betar)
         u_avg = 0.5*(priml[1]+primr[1])
-        p_hat = 0.5*rho_avg/beta_avg
+        p_hat = 0.5*(consl[0]+consr[0])/(betal+betar)
 
         flux = np.zeros(Euler.n_vars)
         flux[0] = rho_ln*u_avg
@@ -80,5 +99,44 @@ class Euler:
         flux[2] = flux[0]*(
             0.5/(beta_ln*(Euler.gamma-1)) + u_avg**2 - 0.5*(priml[1]**2+primr[1]**2)
         ) + p_hat*u_avg
+        return flux
+    
+    @staticmethod
+    def chandrashekhar_surface_flux(consl, consr, flux_blender_value=0):
+        # chandrashekhar's surface flux
+        # doesn't assert positivity
+
+        # first set the volume flux
+        priml = Euler.cons_to_prim(consl)
+        primr = Euler.cons_to_prim(consr)
+        betal = 0.5*consl[0]/priml[2]
+        betar = 0.5*consr[0]/primr[2]
+        rho_ln = Euler.log_avg(consl[0], consr[0])
+        beta_ln = Euler.log_avg(betal, betar)
+        u_avg = 0.5*(priml[1]+primr[1])
+        p_hat = 0.5*(consl[0]+consr[0])/(betal+betar)
+
+        flux = np.zeros(Euler.n_vars)
+        flux[0] = rho_ln*u_avg
+        flux[1] = flux[0]*u_avg + p_hat
+        flux[2] = flux[0]*(
+            0.5/(beta_ln*(Euler.gamma-1)) + u_avg**2 - 0.5*(priml[1]**2+primr[1]**2)
+        ) + p_hat*u_avg
+
+        # hybrid matrix based stabilisation
+        rho_sql = consl[0]**0.5
+        rho_sqr = consr[0]**0.5
+        temp = 1/(rho_sql + rho_sqr)
+        ui = (rho_sql*priml[1] + rho_sqr*primr[1])*temp # 'i' for intermediate
+        Hi = ( (consl[2]+priml[2])/rho_sql + (consr[2]+primr[2])/rho_sqr )*temp
+        ai = ((Euler.gamma-1)*(Hi-0.5*ui**2))**0.5
+        ui_abs = abs(ui)
+        lambda_max_rus = ui_abs + ai
+        lambda2_blend = flux_blender_value*lambda_max_rus + (1-flux_blender_value)*ui_abs
+        eigenvalues = np.array([lambda_max_rus, lambda2_blend, lambda_max_rus])
+        K = Euler.get_K(ui, ai, Hi)
+        Kinv = Euler.get_Kinv(ui, ai, Hi)
+        A = K.dot( np.diag(eigenvalues).dot(Kinv) )
+        flux -= 0.5*A.dot(consr-consl)
         return flux
     
