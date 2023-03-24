@@ -16,3 +16,17 @@ class DoFHandler:
             self.x_dofs[i_cell*(N+1):(i_cell+1)*(N+1)] = (
                 (self.quad.q_points+1)*mesh.J + mesh.x_faces[i_cell]
             )
+        self.D = np.zeros((N+1,N+1))
+        for col in range(N+1):
+            # construct col-th basis polynomial in reference space
+            # and also compute its derivative
+            roots = np.delete(self.quad.q_points, col)
+            basis_mono_coeffs = np.polynomial.polynomial.polyfromroots(roots)
+            for root in roots:
+                basis_mono_coeffs /= (self.quad.q_points[col]-root)
+            basis_der_mono_coeffs = np.polynomial.polynomial.polyder(basis_mono_coeffs)
+            for row in range(N+1):
+                self.D[row,col] = np.polynomial.polynomial.polyval(
+                    self.quad.q_points[row],
+                    basis_der_mono_coeffs
+                )

@@ -16,6 +16,7 @@ class EulerSolver:
         self.bc_func_left = None
         self.bc_func_right = None
         self.cbm = None
+        self.D = None
         self.dof_handler = None
         self.mesh = None
         self.states = None
@@ -161,7 +162,54 @@ class EulerSolver:
         
         # calculate the DG residual
         for i_cell in range(self.mesh.n_cells):
-            local_dofs = np.arange(i_cell*(N+1), (i_cell+1)*(N+1))
-            rhs[local_dofs] = np.zeros(Euler.n_vars)
-            # calculate volume flux at every flux point
+            cell_dofs = np.arange(i_cell*(N+1), (i_cell+1)*(N+1))
+            for i_dof in cell_dofs:
+                rhs[i_dof] = np.zeros(Euler.n_vars)
+            # calculate volume flux at every internal flux point and add its contrib to rhs
+            # internal flux points contribution
+            for i in range(1,N+1):
+                vol_flux = np.zeros(Euler.n_vars)
+                for j in range(i,N+1):
+                    for k in range(i):
+                        vol_flux += (
+                            2*self.dof_handler.quad.q_weights[k]*self.dof_handler.D[k,j]*
+                            self.volume_flux(
+                                self.states.entries[cell_dofs[k]],
+                                self.states.entries[cell_dofs[j]]
+                            )
+                        )
+                rhs[cell_dofs[i-1]] += vol_flux/self.dof_handler.quad.q_weights[i-1]
+                rhs[cell_dofs[i]] += -vol_flux/self.dof_handler.quad.q_weights[i]
+            # surface contribution
+            rhs[cell_dofs[0]] += -surface_fluxes[i_cell]/self.dof_handler.quad.q_weights[0]
+            rhs[cell_dofs[N]] += surface_fluxes[i_cell+1]/self.dof_handler.quad.q_weights[N]
+        
+        # update rhs for troubled cells
+        for i_cell in range(self.mesh.n_cells):
+            if self.alpha.entries[i_cell] > 0:
+                # scale the rhs
+                cell_alpha = self.alpha.entries[i_cell]
+                cell_dofs = np.arange(i_cell*(N+1), (i_cell+1)*(N+1))
+                for i_dof in cell_dofs:
+                    rhs[i_dof] *= (1-self.alpha.entries[i_cell])
+                # internal subcell fluxes' contribution
+                for i in range(1,N+1):
+                    subcell_surf_flux = self.surface_flux(
+                        self.states.entries[cell_dofs[i-1]],
+                        self.states.entries[cell_dofs[i]],
+                        self.alpha.entries[i_cell]
+                    )
+                    rhs[cell_dofs[i-1]] += (
+                        cell_alpha*subcell_surf_flux/self.dof_handler.quad.q_weights[i-1]
+                    )
+                    rhs[cell_dofs[i]] += (
+                        -cell_alpha*subcell_surf_flux/self.dof_handler.quad.q_weights[i]
+                    )
+                # surface contribution
+                rhs[cell_dofs[0]] += (
+                    -cell_alpha*surface_fluxes[i_cell]/self.dof_handler.quad.q_weights[0]
+                )
+                rhs[cell_dofs[N]] += (
+                    cell_alpha*surface_fluxes[i_cell+1]/self.dof_handler.quad.q_weights[N]
+                )
             
