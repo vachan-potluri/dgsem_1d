@@ -107,4 +107,11 @@ class EulerSolver:
                 alpha_old[i_cell],
                 0.5*np.max(alpha_old[i_nbs])
             )
+    
+    def calc_rhs(self):
+        # calculates the rhs
+        
+        # first assert positivity
+        for i_dof in range(self.dof_handler.n_dofs):
+            Euler.assert_positivity(self.states.entries[i_dof])
             
