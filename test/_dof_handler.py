@@ -3,6 +3,8 @@ from grid import *
 from dof_handler import *
 
 print_testing_statement("DoFHandler")
-m = Grid(0,1,10)
-dh = DoFHandler(m, 2)
+m = Grid(-1,4,2)
+dh = DoFHandler(m, 3)
 print("Number of dofs", dh.n_dofs)
+print("DoF locations")
+print(dh.x_dofs)

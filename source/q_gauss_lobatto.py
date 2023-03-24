@@ -1,3 +1,4 @@
+from common import *
 class QGaussLobatto:
     # Class to calculate and store points and weights for lobatto quadrature
     def __init__(self, n_points):
@@ -31,3 +32,6 @@ class QGaussLobatto:
             temp1 = (14.0 - 7**0.5)/30
             temp2 = 1.0/15
             self.q_weights = [temp2, temp1, temp, temp, temp1, temp2]
+        # convert to numpy arrays
+        self.q_points = np.array(self.q_points)
+        self.q_weights = np.array(self.q_weights)

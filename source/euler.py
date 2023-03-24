@@ -5,6 +5,7 @@ class Euler:
     # Provides some useful functions to deal with euler states
     gamma = 1.4
     R = 286.7
+    n_vars = 3
 
     @staticmethod
     def assert_positivity(cons):
