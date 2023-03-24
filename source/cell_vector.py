@@ -7,6 +7,7 @@ class CellVector:
     def __init__(self, mesh, n_vars=1):
         assert type(mesh) == Grid, "Expected a DoFHandler instance as input"
         assert n_vars>=1, "Zero/negative number of variables received"
+        self.mesh = mesh
         self.entries = np.zeros(mesh.n_cells, dtype=object)
         for i in range(mesh.n_cells):
             self.entries[i] = np.zeros(n_vars)

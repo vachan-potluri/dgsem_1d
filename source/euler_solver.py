@@ -39,6 +39,21 @@ class EulerSolver:
     
     def set_states(self, func, prim=True):
         # sets the states based on the function provided
-        # the function should take position as the input and return the euler state
+        # the function should take dof location and cell center location as the input,
+        # and return the euler state
         # by default, the function is assumed to return primitive variables (rho, u, p)
-        pass
+        assert self.states != None, "Dofs must be distributed before setting states"
+        for i_cell in range(self.mesh.n_cells):
+            for i_dof in range(i_cell*(self.dof_handler.N+1), (i_cell+1)*(self.dof_handler.N+1)):
+                if prim==True:
+                    self.states.entries[i_dof] = Euler.prim_to_cons(
+                        func(
+                            self.dof_handler.x_dofs[i_dof],
+                            self.mesh.x_cells[i_cell]
+                        )
+                    )
+                else:
+                    self.states.entries[i_dof] = func(
+                        self.dof_handler.x_dofs[i_dof],
+                        self.mesh.x_cells[i_cell]
+                    )
