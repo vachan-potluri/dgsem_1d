@@ -16,12 +16,17 @@ class EulerSolver:
         self.bc_func_left = None
         self.bc_func_right = None
         self.cbm = None
+        self.CFL = None
         self.D = None
         self.dof_handler = None
         self.mesh = None
+        self.n_sampling_points = None
         self.states = None
         self.surface_flux = None
+        self.time = None
+        self.end_time = None
         self.volume_flux = None
+        self.write_freq = None
     
     def set_mesh(self, mesh):
         # sets the mesh, and variables that are defined on the mesh
@@ -87,6 +92,13 @@ class EulerSolver:
         else:
             assert False, "Currently only chandrashekhar flux supported"
     
+    def set_time_controls(self, start_time, end_time, write_freq, CFL=0.5, n_sampling_points=1000):
+        self.time = start_time
+        self.end_time = end_time
+        self.write_freq = write_freq
+        self.CFL = CFL
+        self.n_sampling_points = n_sampling_points
+    
     def calc_blender(self):
         # calculates the blender values
         # currently uses "pressure times density"
@@ -141,14 +153,14 @@ class EulerSolver:
         surface_fluxes = np.zeros(self.mesh.n_cells+1, dtype=object)
         cons = self.states.entries[0]
         surface_fluxes[0] = self.surface_flux(
-            self.bc_func_left(self.mesh.x_faces[0], 0, cons), # <-- time controller?
+            self.bc_func_left(self.mesh.x_faces[0], self.time, cons),
             cons,
             self.alpha.entries[0]
         )
         cons = self.states.entries[-1]
         surface_fluxes[-1] = self.surface_flux(
             cons,
-            self.bc_func_right(self.mesh.x_faces[-1], 0, cons),
+            self.bc_func_right(self.mesh.x_faces[-1], self.time, cons),
             self.alpha.entries[-1]
         )
         for i_face in range(1, self.mesh.n_cells):
@@ -212,4 +224,65 @@ class EulerSolver:
                 rhs[cell_dofs[N]] += (
                     cell_alpha*surface_fluxes[i_cell+1]/self.dof_handler.quad.q_weights[N]
                 )
+        return rhs
+    
+    def calc_time_step(self):
+        # calculate and return the time step
+        N = self.dof_handler.N
+        dt = 1e10
+        for i_cell in range(self.mesh.n_cells):
+            dt_cell = 1e10
+            cell_dofs = np.arange(i_cell*(N+1), (i_cell+1)*(N+1))
+            for i in range(N+1):
+                cons = self.states.entries[cell_dofs[i]]
+                prim_aux = Euler.cons_to_prim_aux(cons)
+                dt_cell = min(
+                    dt_cell,
+                    self.CFL/N**1.5*(
+                        1/(self.mesh.Jinv*abs(prim_aux[1]) + prim_aux[3]/self.mesh.dx)
+                    )
+                )
+            dt = min(dt, dt_cell)
+        return dt
+    
+    def do_time_step(self, dt):
+        # performs TVD-RK3 update with the given time step
+        states_old = self.states.entries.copy()
+        rhs = self.calc_rhs()
+        self.states.entries += dt*rhs
+        rhs = self.calc_rhs()
+        self.states.entries = 0.75*states_old + 0.25*(self.states.entries + dt*rhs)
+        rhs = self.calc_rhs()
+        self.states.entries = (states_old + 2*(self.states.entries + dt*rhs))/3.0
+        self.time += dt
+    
+    def write_solution(self, counter):
+        print("Writing solution")
+        filename = f"solution_{counter:06d}.csv"
+        save_array = np.zeros((self.dof_handler.n_dofs, 4))
+        for i_dof in range(self.dof_handler.n_dofs):
+            prim = Euler.cons_to_prim(self.states.entries[i_dof])
+            save_array[i_dof,:] = [
+                self.dof_handler.x_dofs[i_dof],
+                prim[0],
+                prim[1],
+                prim[2]
+            ]
+        np.savetxt(filename, save_array, delimiter=",", header="x,rho,u,p")
+    
+    def run(self):
+        # runs the simulation
+        print("\n\nStarting simulation")
+        n_time_steps = 0
+        while self.time < self.end_time:
+            if (n_time_steps % self.write_freq) == 0: self.write_solution(n_time_steps)
+            dt = self.calc_time_step()
+            if (self.time + dt) > self.end_time:
+                dt = self.end_time - self.time
+            print(f"Time: {self.time:1.5e}, dt: {dt:1.5e}")
+            self.do_time_step(dt)
+            n_time_steps += 1
+        self.write_solution(n_time_steps)
+        print("Simulation done\n\n")
+    
             
