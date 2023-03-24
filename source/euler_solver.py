@@ -19,6 +19,8 @@ class EulerSolver:
         self.dof_handler = None
         self.mesh = None
         self.states = None
+        self.surface_flux = None
+        self.volume_flux = None
     
     def set_mesh(self, mesh):
         # sets the mesh, and variables that are defined on the mesh
@@ -70,6 +72,20 @@ class EulerSolver:
         self.bc_func_left = left_func
         self.bc_func_right = right_func
     
+    def set_surface_flux(self, name="chandrashekhar"):
+        # sets the surface flux function
+        if name == "chandrashekhar":
+            self.surface_flux = Euler.chandrashekhar_surface_flux
+        else:
+            assert False, "Currently only chandrashekhar flux supported"
+    
+    def set_volume_flux(self, name="chandrashekhar"):
+        # sets the volume flux function
+        if name == "chandrashekhar":
+            self.volume_flux = Euler.chandrashekhar_volume_flux
+        else:
+            assert False, "Currently only chandrashekhar flux supported"
+    
     def calc_blender(self):
         # calculates the blender values
         # currently uses "pressure times density"
@@ -110,8 +126,42 @@ class EulerSolver:
     
     def calc_rhs(self):
         # calculates the rhs
+        rhs = np.zeros(self.dof_handler.n_dofs, dtype=object)
+        N = self.dof_handler.N
         
         # first assert positivity
         for i_dof in range(self.dof_handler.n_dofs):
             Euler.assert_positivity(self.states.entries[i_dof])
+        
+        # calculate blender
+        self.calc_blender()
+
+        # calculate the surface (cell interface/boundary) fluxes
+        surface_fluxes = np.zeros(self.mesh.n_cells+1, dtype=object)
+        cons = self.states.entries[0]
+        surface_fluxes[0] = self.surface_flux(
+            self.bc_func_left(self.mesh.x_faces[0], 0, cons), # <-- time controller?
+            cons,
+            self.alpha.entries[0]
+        )
+        cons = self.states.entries[-1]
+        surface_fluxes[-1] = self.surface_flux(
+            cons,
+            self.bc_func_right(self.mesh.x_faces[-1], 0, cons),
+            self.alpha.entries[-1]
+        )
+        for i_face in range(1, self.mesh.n_cells):
+            i_dof_left = (i_face-1)*(N+1) + N
+            i_dof_right = i_face*(N+1)
+            surface_fluxes[i_face] = self.surface_flux(
+                self.states.entries[i_dof_left],
+                self.states.entries[i_dof_right],
+                0.5*(self.alpha.entries[i_face-1] + self.alpha.entries[i_face])
+            )
+        
+        # calculate the DG residual
+        for i_cell in range(self.mesh.n_cells):
+            local_dofs = np.arange(i_cell*(N+1), (i_cell+1)*(N+1))
+            rhs[local_dofs] = np.zeros(Euler.n_vars)
+            # calculate volume flux at every flux point
             
