@@ -6,6 +6,7 @@ from dof_handler import *
 from dof_vector import *
 from euler import *
 from grid import *
+import ls3_rk45_coeffs
 
 class EulerSolver:
     # The solver class which coordinates everything
@@ -19,6 +20,7 @@ class EulerSolver:
         self.CFL = None
         self.D = None
         self.dof_handler = None
+        self.do_time_step = None
         self.mesh = None
         self.n_sampling_points = None
         self.states = None
@@ -92,12 +94,20 @@ class EulerSolver:
         else:
             assert False, "Currently only chandrashekhar flux supported"
     
-    def set_time_controls(self, start_time, end_time, write_freq, CFL=0.5, n_sampling_points=1000):
+    def set_time_controls(
+        self, start_time, end_time, write_freq, CFL=0.5, n_sampling_points=1000, rk_order=3
+    ):
         self.time = start_time
         self.end_time = end_time
         self.write_freq = write_freq
         self.CFL = CFL
         self.n_sampling_points = n_sampling_points
+        if rk_order == 3:
+            self.do_time_step = self.tvd_rk3_time_step
+        elif rk_order == 4:
+            self.do_time_step = self.ls3_rk45_time_step
+        else:
+            assert False, "Currently only 3rd and 4th order RK integration are supported"
     
     def calc_blender(self):
         # calculates the blender values
@@ -245,7 +255,7 @@ class EulerSolver:
             dt = min(dt, dt_cell)
         return dt
     
-    def do_time_step(self, dt):
+    def tvd_rk3_time_step(self, dt):
         # performs TVD-RK3 update with the given time step
         states_old = self.states.entries.copy()
         rhs = self.calc_rhs()
@@ -254,6 +264,32 @@ class EulerSolver:
         self.states.entries = 0.75*states_old + 0.25*(self.states.entries + dt*rhs)
         rhs = self.calc_rhs()
         self.states.entries = (states_old + 2*(self.states.entries + dt*rhs))/3.0
+        self.time += dt
+    
+    def ls3_rk45_time_step(self, dt):
+        # performs 3-register 5-stage RK4 update
+        # stage 1
+        rhs = self.calc_rhs()
+        self.states.entries += ls3_rk45_coeffs.a_outer[0]*dt*rhs
+        rhs1 = rhs.copy()
+        # stage 2
+        rhs = self.calc_rhs()
+        self.states.entries += dt*(
+            (ls3_rk45_coeffs.a_inner[0]-ls3_rk45_coeffs.a_outer[0])*rhs1 +
+            ls3_rk45_coeffs.a_outer[1]*rhs
+        )
+        rhs2 = rhs1.copy()
+        rhs1 = rhs.copy()
+        # stage 3
+        for k in [0,1,2]:
+            rhs = self.calc_rhs()
+            self.states.entries += dt*(
+                (ls3_rk45_coeffs.b[k] - ls3_rk45_coeffs.a_inner[k])*rhs2 +
+                (ls3_rk45_coeffs.a_inner[k+1] - ls3_rk45_coeffs.a_outer[k+1])*rhs1 +
+                ls3_rk45_coeffs.a_outer[k]*rhs
+            )
+            rhs2 = rhs1.copy()
+            rhs1 = rhs.copy()
         self.time += dt
     
     def write_solution(self, counter):
