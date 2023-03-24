@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 
 # Result files in run directory
-run/*csv
+run/**/*csv

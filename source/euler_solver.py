@@ -259,16 +259,18 @@ class EulerSolver:
     def write_solution(self, counter):
         print("Writing solution")
         filename = f"solution_{counter:06d}.csv"
-        save_array = np.zeros((self.dof_handler.n_dofs, 4))
+        save_array = np.zeros((self.dof_handler.n_dofs, 5))
         for i_dof in range(self.dof_handler.n_dofs):
+            i_cell = math.floor(i_dof/(self.dof_handler.N+1))
             prim = Euler.cons_to_prim(self.states.entries[i_dof])
             save_array[i_dof,:] = [
                 self.dof_handler.x_dofs[i_dof],
                 prim[0],
                 prim[1],
-                prim[2]
+                prim[2],
+                self.alpha.entries[i_cell]
             ]
-        np.savetxt(filename, save_array, delimiter=",", header="x,rho,u,p")
+        np.savetxt(filename, save_array, delimiter=",", header="x,rho,u,p,alpha")
     
     def run(self):
         # runs the simulation

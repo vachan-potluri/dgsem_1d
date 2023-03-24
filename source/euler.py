@@ -97,7 +97,7 @@ class Euler:
         flux[0] = rho_ln*u_avg
         flux[1] = flux[0]*u_avg + p_hat
         flux[2] = flux[0]*(
-            0.5/(beta_ln*(Euler.gamma-1)) + u_avg**2 - 0.5*(priml[1]**2+primr[1]**2)
+            0.5/(beta_ln*(Euler.gamma-1)) + u_avg**2 - 0.25*(priml[1]**2+primr[1]**2)
         ) + p_hat*u_avg
         return flux
     
@@ -120,7 +120,7 @@ class Euler:
         flux[0] = rho_ln*u_avg
         flux[1] = flux[0]*u_avg + p_hat
         flux[2] = flux[0]*(
-            0.5/(beta_ln*(Euler.gamma-1)) + u_avg**2 - 0.5*(priml[1]**2+primr[1]**2)
+            0.5/(beta_ln*(Euler.gamma-1)) + u_avg**2 - 0.25*(priml[1]**2+primr[1]**2)
         ) + p_hat*u_avg
 
         # hybrid matrix based stabilisation
