@@ -11,4 +11,4 @@ class Grid:
         self.dx = self.x_faces[1] - self.x_faces[0] # cell width (uniform)
         self.x_cells = np.linspace(x_left+0.5*self.dx, x_left+length-0.5*self.dx, n_cells)
         self.J = 0.5*self.dx # Jacobian of mapping from any cell to reference space [-1,1]
-        self.Jinv = 1/self.J
+        self.Jinv = 1.0/self.J

@@ -73,7 +73,7 @@ class EulerSolver:
     
     def set_bc_funcs(self, left_func, right_func):
         # sets the BC functions
-        # the functions should take location, time and inner state as input,
+        # the functions should take time and inner state as input,
         # and return the ghost state
         self.bc_func_left = left_func
         self.bc_func_right = right_func
@@ -153,22 +153,21 @@ class EulerSolver:
         surface_fluxes = np.zeros(self.mesh.n_cells+1, dtype=object)
         cons = self.states.entries[0]
         surface_fluxes[0] = self.surface_flux(
-            self.bc_func_left(self.mesh.x_faces[0], self.time, cons),
+            self.bc_func_left(self.time, cons),
             cons,
             self.alpha.entries[0]
         )
         cons = self.states.entries[-1]
         surface_fluxes[-1] = self.surface_flux(
             cons,
-            self.bc_func_right(self.mesh.x_faces[-1], self.time, cons),
+            self.bc_func_right(self.time, cons),
             self.alpha.entries[-1]
         )
         for i_face in range(1, self.mesh.n_cells):
             i_dof_left = (i_face-1)*(N+1) + N
-            i_dof_right = i_face*(N+1)
             surface_fluxes[i_face] = self.surface_flux(
                 self.states.entries[i_dof_left],
-                self.states.entries[i_dof_right],
+                self.states.entries[i_dof_left+1],
                 0.5*(self.alpha.entries[i_face-1] + self.alpha.entries[i_face])
             )
         
@@ -224,6 +223,7 @@ class EulerSolver:
                 rhs[cell_dofs[N]] += (
                     cell_alpha*surface_fluxes[i_cell+1]/self.dof_handler.quad.q_weights[N]
                 )
+        rhs *= -self.mesh.Jinv
         return rhs
     
     def calc_time_step(self):
