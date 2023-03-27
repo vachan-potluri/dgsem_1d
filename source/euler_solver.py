@@ -22,7 +22,7 @@ class EulerSolver:
         self.dof_handler = None
         self.do_time_step = None
         self.mesh = None
-        self.n_sampling_points = None
+        self.n_samples_per_cell = None
         self.states = None
         self.surface_flux = None
         self.time = None
@@ -95,13 +95,13 @@ class EulerSolver:
             assert False, "Currently only chandrashekhar flux supported"
     
     def set_time_controls(
-        self, start_time, end_time, write_freq, CFL=0.5, n_sampling_points=1000, rk_order=3
+        self, start_time, end_time, write_freq, CFL=0.5, n_samples_per_cell=15, rk_order=3
     ):
         self.time = start_time
         self.end_time = end_time
         self.write_freq = write_freq
         self.CFL = CFL
-        self.n_sampling_points = n_sampling_points
+        self.n_samples_per_cell = n_samples_per_cell
         if rk_order == 3:
             self.do_time_step = self.tvd_rk3_time_step
         elif rk_order == 4:
@@ -295,17 +295,33 @@ class EulerSolver:
     def write_solution(self, counter):
         print("Writing solution")
         filename = f"solution_{counter:06d}.csv"
-        save_array = np.zeros((self.dof_handler.n_dofs, 5))
-        for i_dof in range(self.dof_handler.n_dofs):
-            i_cell = math.floor(i_dof/(self.dof_handler.N+1))
-            prim = Euler.cons_to_prim(self.states.entries[i_dof])
-            save_array[i_dof,:] = [
-                self.dof_handler.x_dofs[i_dof],
-                prim[0],
-                prim[1],
-                prim[2],
-                self.alpha.entries[i_cell]
-            ]
+        save_array = np.zeros((self.mesh.n_cells*self.n_samples_per_cell, 5))
+        # for i_dof in range(self.dof_handler.n_dofs):
+        #     i_cell = math.floor(i_dof/(self.dof_handler.N+1))
+        #     prim = Euler.cons_to_prim(self.states.entries[i_dof])
+        #     save_array[i_dof,:] = [
+        #         self.dof_handler.x_dofs[i_dof],
+        #         prim[0],
+        #         prim[1],
+        #         prim[2],
+        #         self.alpha.entries[i_cell]
+        #     ]
+        for i_cell in range(self.mesh.n_cells):
+            sampled_states = self.states.sample_in_cell(i_cell, self.n_samples_per_cell)
+            x_samples = np.linspace(
+                self.mesh.x_faces[i_cell],
+                self.mesh.x_faces[i_cell+1],
+                self.n_samples_per_cell
+            )
+            for i_sample, x_sample in enumerate(x_samples):
+                prim = Euler.cons_to_prim(sampled_states[i_sample])
+                save_array[i_cell*self.n_samples_per_cell + i_sample, :] = [
+                    x_sample,
+                    prim[0],
+                    prim[1],
+                    prim[2],
+                    self.alpha.entries[i_cell]
+                ]
         np.savetxt(filename, save_array, delimiter=",", header="x,rho,u,p,alpha")
     
     def run(self):
