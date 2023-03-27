@@ -101,7 +101,10 @@ class EulerSolver:
         else:
             assert False, "Currently only chandrashekhar flux supported"
     
-    def set_blender_params(self, alpha_max=0.5, do_calc_noise=True, do_filter_noise=False):
+    def set_blender_params(
+        self, alpha_min=1e-3, alpha_max=0.5, do_calc_noise=True, do_filter_noise=False
+    ):
+        self.alpha_min = alpha_min
         self.alpha_max = alpha_max
         self.do_calc_noise = do_calc_noise
         self.do_filter_noise = False
@@ -140,10 +143,10 @@ class EulerSolver:
             energies = pxrho_modes*pxrho_modes
             trouble = max(energies[-1]/np.sum(energies), energies[-2]/np.sum(energies[:-1]))
             alpha = 1/(1+np.exp(-9.21024*(trouble/threshold-1)))
-            if alpha < 1e-3:
+            if alpha < self.alpha_min:
                 self.alpha.entries[i_cell][0] = 0.0
-            elif alpha > 0.5:
-                self.alpha.entries[i_cell][0] = 0.5
+            elif alpha > self.alpha_max:
+                self.alpha.entries[i_cell][0] = self.alpha_max
             else:
                 self.alpha.entries[i_cell][0] = alpha
         
@@ -169,20 +172,26 @@ class EulerSolver:
         Np1 = self.dof_handler.N+1
         pxrho_nodal_values = np.zeros(Np1)
         for i_cell in range(self.mesh.n_cells):
-            for i_dof_local in range(Np1):
-                prim = Euler.cons_to_prim(self.states.entries[i_cell*(Np1)+i_dof_local])
-                pxrho_nodal_values[i_dof_local] = prim[0]*prim[2]
-            pxrho_modes = self.cbm.get_modes(pxrho_nodal_values)
-            pxrho_abs_modes = abs(pxrho_modes)
-            scaled_tvs = pxrho_abs_modes*self.legendre_basis.total_variations
-            tv_bound = np.sum(scaled_tvs)
-            if tv_bound <= 1e-2*np.sum(pxrho_abs_modes):
-                # negligible noise
-                self.alpha.entries[i_cell][1] = 0.0
+            if self.alpha.entries[i_cell][0] < self.alpha_min:
+                for i_dof_local in range(Np1):
+                    prim = Euler.cons_to_prim(self.states.entries[i_cell*(Np1)+i_dof_local])
+                    pxrho_nodal_values[i_dof_local] = prim[0]*prim[2]
+                pxrho_modes = self.cbm.get_modes(pxrho_nodal_values)
+                pxrho_abs_modes = abs(pxrho_modes)
+                scaled_tvs = pxrho_abs_modes*self.legendre_basis.total_variations
+                tv_bound = np.sum(scaled_tvs)
+                if tv_bound <= 1e-2*np.sum(pxrho_abs_modes):
+                    # negligible noise
+                    self.alpha.entries[i_cell][1] = 0.0
+                else:
+                    self.alpha.entries[i_cell][1] = (
+                        (0.5*self.alpha_max - self.alpha.entries[i_cell][0])*
+                        (1 - scaled_tvs[1]/tv_bound)
+                    )
+                if self.do_filter_noise:
+                    self.alpha.entries[i_cell][0] += self.alpha.entries[i_cell][1]
             else:
-                self.alpha.entries[i_cell][1] = (0.5-self.alpha.entries[i_cell][0])*(1-scaled_tvs[1]/tv_bound)
-            if self.do_filter_noise:
-                self.alpha.entries[i_cell][0] += self.alpha.entries[i_cell][1]
+                self.alpha.entries[i_cell][1] = 0.0
     
     def calc_rhs(self):
         # calculates the rhs
