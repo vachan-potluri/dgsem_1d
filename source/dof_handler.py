@@ -16,7 +16,7 @@ class DoFHandler:
             self.x_dofs[i_cell*(N+1):(i_cell+1)*(N+1)] = (
                 (self.quad.q_points+1)*mesh.J + mesh.x_faces[i_cell]
             )
-        self.D = np.zeros((N+1,N+1))
+        self.D = np.zeros((N+1,N+1)) # polynomial derivative matrix
         for col in range(N+1):
             # construct col-th basis polynomial in reference space
             # and also compute its derivative
