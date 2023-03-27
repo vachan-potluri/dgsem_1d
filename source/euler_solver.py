@@ -6,6 +6,7 @@ from dof_handler import *
 from dof_vector import *
 from euler import *
 from grid import *
+from legendre_basis import *
 import ls3_rk45_coeffs
 
 class EulerSolver:
@@ -21,6 +22,7 @@ class EulerSolver:
         self.D = None
         self.dof_handler = None
         self.do_time_step = None
+        self.legendre_basis = None
         self.mesh = None
         self.n_samples_per_cell = None
         self.states = None
@@ -38,7 +40,7 @@ class EulerSolver:
         print(f"\t# cells: {mesh.n_cells}")
         self.mesh = mesh
         print("Initialising blender vector")
-        self.alpha = CellVector(mesh)
+        self.alpha = CellVector(mesh, 2) # first variable: shock alpha, second variable: noise indicator
     
     def distribute_dofs(self, N):
         # modifies the dof handler and solution vectors
@@ -51,6 +53,8 @@ class EulerSolver:
         self.states = DoFVector(self.dof_handler, Euler.n_vars)
         print("Setting change of basis matrix")
         self.cbm = ChangeBasisMatrix(N)
+        print("Setting legendre basis")
+        self.legendre_basis = LegendreBasis(N)
     
     def set_states(self, func, prim=True):
         # sets the states based on the function provided
@@ -127,14 +131,19 @@ class EulerSolver:
             trouble = max(energies[-1]/np.sum(energies), energies[-2]/np.sum(energies[:-1]))
             alpha = 1/(1+np.exp(-9.21024*(trouble/threshold-1)))
             if alpha < 1e-3:
-                self.alpha.entries[i_cell] = 0.0
+                self.alpha.entries[i_cell][0] = 0.0
             elif alpha > 0.5:
-                self.alpha.entries[i_cell] = 0.5
+                self.alpha.entries[i_cell][0] = 0.5
             else:
-                self.alpha.entries[i_cell] = alpha
+                self.alpha.entries[i_cell][0] = alpha
+            # noise indicator based on total variation
+            scaled_tvs = abs(pxrho_modes)*self.legendre_basis.total_variations
+            self.alpha.entries[i_cell][1] = 1-scaled_tvs[1]/np.sum(scaled_tvs)
         
         # second loop: diffuse
-        alpha_old = self.alpha.entries.copy()
+        alpha_old = np.zeros(self.mesh.n_cells)
+        for i_cell in range(self.mesh.n_cells):
+            alpha_old[i_cell] = self.alpha.entries[i_cell][0]
         for i_cell in range(self.mesh.n_cells):
             if i_cell == 0:
                 i_nbs = [i_cell+1]
@@ -142,7 +151,7 @@ class EulerSolver:
                 i_nbs = [i_cell-1]
             else:
                 i_nbs = [i_cell-1, i_cell+1]
-            self.alpha.entries[i_cell] = max(
+            self.alpha.entries[i_cell][0] = max(
                 alpha_old[i_cell],
                 0.5*np.max(alpha_old[i_nbs])
             )
@@ -165,20 +174,20 @@ class EulerSolver:
         surface_fluxes[0] = self.surface_flux(
             self.bc_func_left(self.time, cons),
             cons,
-            self.alpha.entries[0]
+            self.alpha.entries[0][0]
         )
         cons = self.states.entries[-1]
         surface_fluxes[-1] = self.surface_flux(
             cons,
             self.bc_func_right(self.time, cons),
-            self.alpha.entries[-1]
+            self.alpha.entries[-1][0]
         )
         for i_face in range(1, self.mesh.n_cells):
             i_dof_left = (i_face-1)*(N+1) + N
             surface_fluxes[i_face] = self.surface_flux(
                 self.states.entries[i_dof_left],
                 self.states.entries[i_dof_left+1],
-                0.5*(self.alpha.entries[i_face-1] + self.alpha.entries[i_face])
+                0.5*(self.alpha.entries[i_face-1][0] + self.alpha.entries[i_face][0])
             )
         
         # calculate the DG residual
@@ -207,18 +216,18 @@ class EulerSolver:
         
         # update rhs for troubled cells
         for i_cell in range(self.mesh.n_cells):
-            if self.alpha.entries[i_cell] > 0:
+            if self.alpha.entries[i_cell][0] > 0:
                 # scale the rhs
-                cell_alpha = self.alpha.entries[i_cell]
+                cell_alpha = self.alpha.entries[i_cell][0]
                 cell_dofs = np.arange(i_cell*(N+1), (i_cell+1)*(N+1))
                 for i_dof in cell_dofs:
-                    rhs[i_dof] *= (1-self.alpha.entries[i_cell])
+                    rhs[i_dof] *= (1-cell_alpha)
                 # internal subcell fluxes' contribution
                 for i in range(1,N+1):
                     subcell_surf_flux = self.surface_flux(
                         self.states.entries[cell_dofs[i-1]],
                         self.states.entries[cell_dofs[i]],
-                        self.alpha.entries[i_cell]
+                        cell_alpha
                     )
                     rhs[cell_dofs[i-1]] += (
                         cell_alpha*subcell_surf_flux/self.dof_handler.quad.q_weights[i-1]
@@ -295,17 +304,7 @@ class EulerSolver:
     def write_solution(self, counter):
         print("Writing solution")
         filename = f"solution_{counter:06d}.csv"
-        save_array = np.zeros((self.mesh.n_cells*self.n_samples_per_cell, 5))
-        # for i_dof in range(self.dof_handler.n_dofs):
-        #     i_cell = math.floor(i_dof/(self.dof_handler.N+1))
-        #     prim = Euler.cons_to_prim(self.states.entries[i_dof])
-        #     save_array[i_dof,:] = [
-        #         self.dof_handler.x_dofs[i_dof],
-        #         prim[0],
-        #         prim[1],
-        #         prim[2],
-        #         self.alpha.entries[i_cell]
-        #     ]
+        save_array = np.zeros((self.mesh.n_cells*self.n_samples_per_cell, 6))
         for i_cell in range(self.mesh.n_cells):
             sampled_states = self.states.sample_in_cell(i_cell, self.n_samples_per_cell)
             x_samples = np.linspace(
@@ -320,9 +319,10 @@ class EulerSolver:
                     prim[0],
                     prim[1],
                     prim[2],
-                    self.alpha.entries[i_cell]
+                    self.alpha.entries[i_cell][0],
+                    self.alpha.entries[i_cell][1]
                 ]
-        np.savetxt(filename, save_array, delimiter=",", header="x,rho,u,p,alpha")
+        np.savetxt(filename, save_array, delimiter=",", header="x,rho,u,p,alpha_shock,alpha_noise")
     
     def run(self):
         # runs the simulation
