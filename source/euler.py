@@ -45,7 +45,11 @@ class Euler:
     @staticmethod
     def prim_to_cons(prim):
         # doesn't assert positivity
-        return np.array([prim[0], prim[0]*prim[1], prim[2]/(Euler.gamma-1)+prim[0]*(prim[1]**2)])
+        return np.array([
+            prim[0],
+            prim[0]*prim[1],
+            prim[2]/(Euler.gamma-1) + 0.5*prim[0]*(prim[1]**2)
+        ])
     
     @staticmethod
     def log_avg(x1, x2):
