@@ -15,6 +15,9 @@ class EulerSolver:
     def __init__(self):
         # does nothing, just initialises the instance variables to None
         self.alpha = None
+        self.alpha_max = None
+        self.do_calc_noise = None
+        self.do_filter_noise = None
         self.bc_func_left = None
         self.bc_func_right = None
         self.cbm = None
@@ -98,20 +101,27 @@ class EulerSolver:
         else:
             assert False, "Currently only chandrashekhar flux supported"
     
-    def set_time_controls(
-        self, start_time, end_time, write_freq, CFL=0.5, n_samples_per_cell=15, rk_order=3
-    ):
+    def set_blender_params(self, alpha_max=0.5, do_calc_noise=True, do_filter_noise=False):
+        self.alpha_max = alpha_max
+        self.do_calc_noise = do_calc_noise
+        self.do_filter_noise = False
+        if do_calc_noise:
+            self.do_filter_noise = do_filter_noise
+    
+    def set_time_controls(self, start_time, end_time, CFL=0.5, rk_order=3):
         self.time = start_time
         self.end_time = end_time
-        self.write_freq = write_freq
         self.CFL = CFL
-        self.n_samples_per_cell = n_samples_per_cell
         if rk_order == 3:
             self.do_time_step = self.tvd_rk3_time_step
         elif rk_order == 4:
             self.do_time_step = self.ls3_rk45_time_step
         else:
             assert False, "Currently only 3rd and 4th order RK integration are supported"
+    
+    def set_write_controls(self, write_freq=50, n_samples_per_cell=15):
+        self.write_freq = write_freq
+        self.n_samples_per_cell = n_samples_per_cell
     
     def calc_blender(self):
         # calculates the blender values
@@ -171,6 +181,8 @@ class EulerSolver:
                 self.alpha.entries[i_cell][1] = 0.0
             else:
                 self.alpha.entries[i_cell][1] = (0.5-self.alpha.entries[i_cell][0])*(1-scaled_tvs[1]/tv_bound)
+            if self.do_filter_noise:
+                self.alpha.entries[i_cell][0] += self.alpha.entries[i_cell][1]
     
     def calc_rhs(self):
         # calculates the rhs
@@ -183,7 +195,8 @@ class EulerSolver:
         
         # calculate blender
         self.calc_blender()
-        self.calc_noise()
+        if self.do_calc_noise:
+            self.calc_noise()
 
         # calculate the surface (cell interface/boundary) fluxes
         surface_fluxes = np.zeros(self.mesh.n_cells+1, dtype=object)

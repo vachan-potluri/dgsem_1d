@@ -13,6 +13,7 @@ for i in range(s.dof_handler.n_dofs):
     print(f"x = {s.dof_handler.x_dofs[i]:1.4f}, state = {s.states.entries[i]}")
 s.set_surface_flux()
 s.set_volume_flux()
+s.set_blender_params()
 def bc_free(t,cons):
     return cons
 s.set_bc_funcs(bc_free, bc_free)

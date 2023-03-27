@@ -13,10 +13,12 @@ def ic_func_prim(x_dof, x_cell):
 s.set_states(ic_func_prim)
 s.set_surface_flux()
 s.set_volume_flux()
+s.set_blender_params()
 def bc_left(t,cons):
     return Euler.prim_to_cons(np.array([1,0.75,1]))
 def bc_right(t,cons):
     return Euler.prim_to_cons(np.array([0.125,0,0.1]))
 s.set_bc_funcs(bc_left, bc_right)
-s.set_time_controls(0,0.2,20,CFL=0.7,rk_order=3)
+s.set_time_controls(0,0.2,CFL=0.7,rk_order=3)
+s.set_write_controls(50)
 s.run()
