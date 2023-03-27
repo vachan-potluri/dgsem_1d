@@ -33,7 +33,7 @@ class Euler:
             cons[0],
             cons[1]*rhoinv,
             (Euler.gamma-1)*rhoe,
-            (rhoe*(Euler.gamma-1)*Euler.gamma)**0.5
+            (rhoinv*rhoe*(Euler.gamma-1)*Euler.gamma)**0.5
         ])
 
     @staticmethod
