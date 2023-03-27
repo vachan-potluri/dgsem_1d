@@ -18,5 +18,5 @@ def bc_left(t,cons):
 def bc_right(t,cons):
     return Euler.prim_to_cons(np.array([0.125,0,0.1]))
 s.set_bc_funcs(bc_left, bc_right)
-s.set_time_controls(0,0.2,20,CFL=0.5,rk_order=3)
+s.set_time_controls(0,0.2,20,CFL=0.7,rk_order=3)
 s.run()

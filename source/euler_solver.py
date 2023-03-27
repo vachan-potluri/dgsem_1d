@@ -136,9 +136,6 @@ class EulerSolver:
                 self.alpha.entries[i_cell][0] = 0.5
             else:
                 self.alpha.entries[i_cell][0] = alpha
-            # noise indicator based on total variation
-            scaled_tvs = abs(pxrho_modes)*self.legendre_basis.total_variations
-            self.alpha.entries[i_cell][1] = 1-scaled_tvs[1]/np.sum(scaled_tvs)
         
         # second loop: diffuse
         alpha_old = np.zeros(self.mesh.n_cells)
@@ -156,6 +153,25 @@ class EulerSolver:
                 0.5*np.max(alpha_old[i_nbs])
             )
     
+    def calc_noise(self):
+        # calculates total variation based noise values
+        # currently uses "pressure times density"
+        Np1 = self.dof_handler.N+1
+        pxrho_nodal_values = np.zeros(Np1)
+        for i_cell in range(self.mesh.n_cells):
+            for i_dof_local in range(Np1):
+                prim = Euler.cons_to_prim(self.states.entries[i_cell*(Np1)+i_dof_local])
+                pxrho_nodal_values[i_dof_local] = prim[0]*prim[2]
+            pxrho_modes = self.cbm.get_modes(pxrho_nodal_values)
+            pxrho_abs_modes = abs(pxrho_modes)
+            scaled_tvs = pxrho_abs_modes*self.legendre_basis.total_variations
+            tv_bound = np.sum(scaled_tvs)
+            if tv_bound <= 1e-2*np.sum(pxrho_abs_modes):
+                # negligible noise
+                self.alpha.entries[i_cell][1] = 0.0
+            else:
+                self.alpha.entries[i_cell][1] = (0.5-self.alpha.entries[i_cell][0])*(1-scaled_tvs[1]/tv_bound)
+    
     def calc_rhs(self):
         # calculates the rhs
         rhs = np.zeros(self.dof_handler.n_dofs, dtype=object)
@@ -167,6 +183,7 @@ class EulerSolver:
         
         # calculate blender
         self.calc_blender()
+        self.calc_noise()
 
         # calculate the surface (cell interface/boundary) fluxes
         surface_fluxes = np.zeros(self.mesh.n_cells+1, dtype=object)
