@@ -76,12 +76,12 @@ class Euler:
     @staticmethod
     def get_Kinv(u, a, H):
         # returns the inverse of right eigenvector matrix
-        Kinv = np.zeros((Euler.n_vars, Euler.n_vars))
-        # setting rows
-        temp = 1/(Euler.gamma-1)
-        Kinv[0,:] = [H+a*(u-a)*temp, -u-a*temp, 1]
-        Kinv[1,:] = [2*(2*a**2*temp - H), 2*u, -2]
-        Kinv[2,:] = [H-a*(u+a)*temp, -u+a*temp, 1]
+        temp = 1/(u**2-2*H)
+        Kinv = np.array([
+            [0.5*(u**3 - 2*H*u - a*u**2)*temp/a, 0.5*(2*H + 2*u*a - u**2)*temp/a, -temp],
+            [2*(u**2-H)*temp, -2*u*temp, 2*temp],
+            [0.5*(2*H*u - a*u**2 - u**3)*temp/a, 0.5*(2*a*u - 2*H + u**2)*temp/a, -temp]
+        ])
         return Kinv
     
     @staticmethod
